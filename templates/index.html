@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GradRoad | 졸업 로드맵 웹 프로토타입</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+  <a class="skip-link" href="#contentMain">메인 콘텐츠로 바로가기</a>
+
+  <header class="hero" id="heroCover">
+    <canvas id="heroMapCanvas" class="hero-canvas" aria-hidden="true"></canvas>
+    <div class="hero-shade" aria-hidden="true"></div>
+    <div class="mac-window-bar" aria-hidden="true">
+      <span class="traffic red"></span>
+      <span class="traffic yellow"></span>
+      <span class="traffic green"></span>
+      <span class="window-title">GradRoad.app</span>
+    </div>
+    <div class="hero-copy">
+      <p class="eyebrow">Graduation Roadmap Service</p>
+      <h1>GradRoad</h1>
+      <p class="lead">위상정렬 기반 선수과목 검증과 추천/로드맵을 결합한 전공 이수 계획 도구</p>
+      <div class="hero-actions" aria-label="빠른 기능 이동">
+        <button class="hero-action primary" type="button" data-hero-tab="roadmap">로드맵 생성</button>
+        <button class="hero-action" type="button" data-hero-tab="search">과목 검색</button>
+      </div>
+      <div class="hero-tags">
+        <span class="hero-tag">팀 프로젝트 기반 설계</span>
+        <span class="hero-tag">CSV 데이터 + 알고리즘 파이프라인</span>
+        <span class="hero-tag">실시간 상태 반영</span>
+      </div>
+    </div>
+    <div class="hero-card" aria-live="polite">
+      <div class="hero-stat">
+        <span class="hero-label">등록 과목 수</span>
+        <strong id="courseCount">-</strong>
+        <small>총 과목 데이터</small>
+      </div>
+      <hr class="divider" />
+      <div class="hero-stat">
+        <span class="hero-label">선수과목 그래프</span>
+        <strong id="cycleState">검사중</strong>
+        <small>사이클 유무 점검 완료</small>
+      </div>
+      <div class="hero-meter" aria-hidden="true">
+        <span></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout" id="contentMain">
+    <aside class="panel sidebar">
+      <div class="panel-head panel-head-compact">
+        <div>
+          <p class="eyebrow">Current Term</p>
+          <h2>기준 학기 설정</h2>
+          <p>현재 학년/학기를 기준으로 과목 추천 및 로드맵 계산이 달라집니다.</p>
+        </div>
+      </div>
+      <div class="term-grid">
+        <label>학년
+          <select id="currentYear">
+            <option value="1">1학년</option>
+            <option value="2">2학년</option>
+            <option value="3">3학년</option>
+            <option value="4">4학년</option>
+          </select>
+        </label>
+        <label>학기
+          <select id="currentSemester">
+            <option value="spring">1학기</option>
+            <option value="fall">2학기</option>
+          </select>
+        </label>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="section-title">현재 이수 과목 선택</div>
+      <p class="hint">기준 학기를 바꾸면 이전 학기 과목이 자동 선택됩니다. 필요하면 직접 조정하세요.</p>
+      <div class="toolbar compact-toolbar">
+        <button class="ghost" id="clearCompletedBtn" type="button">전체 해제</button>
+      </div>
+      <div id="completedBox" class="check-list" role="list"></div>
+    </aside>
+
+    <section class="content">
+      <section class="panel stat-panel" aria-label="졸업요건 현황">
+        <section class="stat-grid" id="statusCards" aria-live="polite"></section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Team Modules</p>
+            <h2>팀원별 역할 분담</h2>
+            <p>김유빈, 김도훈, 신한서, 신호진이 각 모듈을 독립적으로 구현했습니다.</p>
+          </div>
+          <span class="badge">4 modules</span>
+        </div>
+        <div class="team-table" id="teamModules"></div>
+      </section>
+
+      <section class="panel tabs-shell">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Core Services</p>
+            <h2>기능 메뉴</h2>
+          </div>
+        </div>
+        <nav class="tabs" role="tablist" aria-label="GradRoad 기능 메뉴">
+          <button class="tab active" id="tabbtn-search" role="tab" aria-controls="tab-search" aria-selected="true" tabindex="0" data-tab="search">1. 과목 검색</button>
+          <button class="tab" id="tabbtn-prerequisite" role="tab" aria-controls="tab-prerequisite" aria-selected="false" tabindex="-1" data-tab="prerequisite">2. 선수과목 검증</button>
+          <button class="tab" id="tabbtn-recommend" role="tab" aria-controls="tab-recommend" aria-selected="false" tabindex="-1" data-tab="recommend">3. 이번 학기 추천</button>
+          <button class="tab" id="tabbtn-roadmap" role="tab" aria-controls="tab-roadmap" aria-selected="false" tabindex="-1" data-tab="roadmap">4. 로드맵 생성</button>
+        </nav>
+
+        <section class="panel tab-panel active" id="tab-search" role="tabpanel" aria-labelledby="tabbtn-search" tabindex="0">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">김유빈 · Trie + Hash Table</p>
+              <h2>과목 검색 및 자동완성</h2>
+              <p>접두어 자동완성(Trie)과 KMP 문자열 탐색으로 빠르게 과목을 찾습니다.</p>
+            </div>
+            <span class="badge">Trie · KMP</span>
+          </div>
+          <div class="form-grid">
+            <label>자동완성 검색어
+              <input id="prefixInput" value="알고" placeholder="예: 알고, 자료, 데이터" aria-label="자동완성 검색어 입력" />
+            </label>
+            <label>키워드 검색어
+              <input id="keywordInput" value="데이터" placeholder="예: 그래프, AI, 보안" aria-label="키워드 검색어 입력" />
+            </label>
+          </div>
+          <div class="toolbar">
+            <button id="searchBtn" aria-label="과목 검색 실행">검색 실행</button>
+            <button class="ghost" id="clearSearchBtn" type="button">입력 초기화</button>
+          </div>
+          <div class="result-grid">
+            <div class="output-box">
+              <div class="section-title">자동완성 결과</div>
+              <div id="autocompleteResult" class="content-block" aria-live="polite"></div>
+            </div>
+            <div class="output-box">
+              <div class="section-title">KMP 키워드 검색 결과</div>
+              <div id="keywordResult" class="content-block" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel tab-panel" id="tab-prerequisite" role="tabpanel" aria-labelledby="tabbtn-prerequisite" tabindex="0">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">김도훈 · Directed Graph</p>
+              <h2>선수과목 검증 및 위상정렬</h2>
+              <p>이미 이수한 과목인지, 선수과목 미이수인지 구분해 수강 가능 여부를 검증합니다.</p>
+            </div>
+            <span class="badge">DFS · Topological Sort</span>
+          </div>
+          <div class="form-grid">
+            <label>검증할 과목
+              <select id="targetCourse" aria-label="검증 대상 과목 선택"></select>
+            </label>
+            <label>현재 조건
+              <input id="completedSummary" readonly value="이수 과목 기준 계산" />
+            </label>
+          </div>
+          <div class="toolbar">
+            <button id="prereqBtn" aria-label="선수과목 검증 실행">선수과목 검증</button>
+          </div>
+          <div id="prereqResult" class="output-box content-block" aria-live="polite"></div>
+        </section>
+
+        <section class="panel tab-panel" id="tab-recommend" role="tabpanel" aria-labelledby="tabbtn-recommend" tabindex="0">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">신한서 · DP Table + Heap</p>
+              <h2>졸업요건 분석 및 이번 학기 추천</h2>
+              <p>그리디 + 0/1 Knapsack DP로 학점 제한 내 추천 조합을 구성합니다.</p>
+            </div>
+            <span class="badge">Greedy · DP</span>
+          </div>
+          <div class="form-grid">
+            <label>이번 학기
+              <select id="recommendSeason" aria-label="추천 기준 학기">
+                <option value="spring">1학기</option>
+                <option value="fall">2학기</option>
+              </select>
+            </label>
+            <label>최대 수강 학점
+              <input id="recommendCredit" type="number" min="3" max="24" value="18" aria-label="추천 최대 학점" />
+            </label>
+          </div>
+          <div class="toolbar">
+            <button id="recommendBtn" aria-label="추천 실행">추천 실행</button>
+            <button class="ghost" id="recommendExportBtn" type="button">추천 JSON 저장</button>
+          </div>
+          <div id="recommendResult" class="output-box content-block" aria-live="polite"></div>
+        </section>
+
+        <section class="panel tab-panel" id="tab-roadmap" role="tabpanel" aria-labelledby="tabbtn-roadmap" tabindex="0">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">신호진 · Stack + Constraint Matrix</p>
+              <h2>최종 졸업 로드맵 생성</h2>
+              <p>현재 상태에서 남은 학기 내 과목 배치 계획을 단계적으로 구성합니다.</p>
+            </div>
+            <span class="badge">Backtracking · Binary Search</span>
+          </div>
+          <div class="form-grid">
+            <label>목표 남은 학기 수
+              <input id="roadmapSemesters" type="number" min="1" max="8" value="4" aria-label="목표 남은 학기 수" />
+            </label>
+            <label>학기당 최대 학점
+              <input id="roadmapCredit" type="number" min="3" max="24" value="18" aria-label="학기당 최대 학점" />
+            </label>
+          </div>
+          <div class="toolbar">
+            <button id="roadmapBtn" aria-label="로드맵 생성">로드맵 생성</button>
+            <button class="ghost" id="roadmapTextBtn" type="button">텍스트 저장</button>
+            <button class="ghost" id="roadmapJsonBtn" type="button">JSON 저장</button>
+          </div>
+          <div id="roadmapResult" class="output-box content-block" aria-live="polite"></div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    <span>GradRoad Web Prototype</span>
+    <span>Data Source: data/*.csv + data/data_source.txt</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
