@@ -99,6 +99,52 @@ function seasonKo(season) {
   return season === 'spring' ? '1학기' : '2학기';
 }
 
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+}
+
+function progressPercent(current, target) {
+  return target > 0 ? clampPercent((Number(current) / Number(target)) * 100) : 0;
+}
+
+function categoryTone(category) {
+  const tones = {
+    '기초교양': 'blue',
+    '융합교양': 'purple',
+    '계열교양': 'cyan',
+    '필수전공': 'orange',
+    '전공필수': 'orange',
+    '선택전공': 'green',
+    '전공선택': 'green',
+  };
+  return tones[category] || 'gray';
+}
+
+function progressBar(label, current, target, tone = 'blue') {
+  const percent = progressPercent(current, target);
+  return `
+    <div class="progress-row">
+      <div class="progress-label">
+        <span><i class="legend-dot ${tone}"></i>${escapeHtml(label)}</span>
+        <strong>${current}/${target}학점</strong>
+      </div>
+      <div class="progress-track" role="progressbar" aria-label="${escapeHtml(label)} 이수율" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">
+        <span class="progress-fill ${tone}" style="width:${percent}%"></span>
+      </div>
+    </div>`;
+}
+
+function creditRing(current, target, label) {
+  const percent = progressPercent(current, target);
+  return `
+    <div class="credit-ring" style="--progress:${percent}" role="img" aria-label="${escapeHtml(label)} ${percent}%">
+      <div>
+        <strong>${percent}<small>%</small></strong>
+        <span>${escapeHtml(label)}</span>
+      </div>
+    </div>`;
+}
+
 function applyCurrentTermToPanels() {
   $('recommendSeason').value = state.currentSemester;
 }
@@ -271,6 +317,46 @@ function courseStatusTable(courses, completedIds = []) {
     </div>`;
 }
 
+function prerequisiteFlowView(data) {
+  const completed = new Set(data.completed || []);
+  const missing = new Set((data.missing_all || []).map((course) => course.course_id));
+  const related = new Set([
+    ...(data.all_prerequisites || []).map((course) => course.course_id),
+    data.target.course_id,
+  ]);
+  const ordered = (data.topological_order || []).filter((course) => related.has(course.course_id));
+  if (!ordered.some((course) => course.course_id === data.target.course_id)) {
+    ordered.push(data.target);
+  }
+  const nodes = ordered.map((course, index) => {
+    const isTarget = course.course_id === data.target.course_id;
+    const status = isTarget ? 'target' : completed.has(course.course_id) ? 'done' : missing.has(course.course_id) ? 'missing' : 'ready';
+    const statusLabel = isTarget ? '검증 대상' : status === 'done' ? '이수 완료' : status === 'missing' ? '먼저 이수' : '수강 가능';
+    return `
+      ${index > 0 ? '<span class="flow-arrow" aria-hidden="true">→</span>' : ''}
+      <article class="flow-node ${status}">
+        <span>${escapeHtml(statusLabel)}</span>
+        <strong>${escapeHtml(course.course_name)}</strong>
+        <small>${escapeHtml(course.course_id)}</small>
+      </article>`;
+  }).join('');
+  return `
+    <div class="visual-block">
+      <div class="visual-head">
+        <div>
+          <span class="visual-kicker">TOPOLOGICAL PATH</span>
+          <h3>위상정렬 기반 권장 이수 순서</h3>
+        </div>
+        <div class="visual-legend">
+          <span><i class="legend-dot green"></i>이수 완료</span>
+          <span><i class="legend-dot orange"></i>먼저 이수</span>
+          <span><i class="legend-dot blue"></i>검증 대상</span>
+        </div>
+      </div>
+      <div class="flow-scroll"><div class="prerequisite-flow">${nodes}</div></div>
+    </div>`;
+}
+
 function prerequisiteAvailabilityView(data) {
   const availability = data.availability || {};
   const code = availability.code || (data.is_available_now ? 'available' : 'missing_prerequisite');
@@ -412,17 +498,26 @@ async function renderStatusCards() {
       ['필수전공', '필수전공', state.requirements['필수전공'] || state.requirements['전공필수'] || 0],
       ['선택전공', '선택전공', state.requirements['선택전공'] || state.requirements['전공선택'] || 0],
     ];
-    const deficitCards = summaryRows
+    const categoryProgress = summaryRows
       .filter(([, , required]) => required > 0)
-      .map(([, label, required]) => {
-        const have = rec.earned[label] || 0;
-        return `<div class="stat-card"><span>${label} 부족</span><strong>${Math.max(required - have, 0)}학점</strong></div>`;
-      }).join('');
+      .map(([, label, required]) => progressBar(label, rec.earned[label] || 0, required, categoryTone(label)))
+      .join('');
+    const remainingTotal = Math.max(requiredTotal - earnedTotal, 0);
     $('statusCards').innerHTML = `
-      <div class="stat-card"><span>현재 기준 학기</span><strong>${state.currentAcademicYear}학년 ${currentSemesterKo()}</strong></div>
-      <div class="stat-card"><span>이수 과목</span><strong>${selectedCompleted().length}개</strong></div>
-      <div class="stat-card"><span>총 전공학점</span><strong>${earnedTotal}/${requiredTotal}</strong></div>
-      ${deficitCards}
+      <div class="progress-overview">
+        ${creditRing(earnedTotal, requiredTotal, '전체 이수율')}
+        <div class="progress-copy">
+          <span class="visual-kicker">GRADUATION PROGRESS</span>
+          <h2>${state.currentAcademicYear}학년 ${currentSemesterKo()} 기준</h2>
+          <p>현재 <strong>${selectedCompleted().length}개 과목 · ${earnedTotal}학점</strong>을 이수했습니다. 졸업 목표까지 <strong>${remainingTotal}학점</strong> 남았습니다.</p>
+          <div class="overview-metrics">
+            <span><b>${earnedTotal}</b> 이수 학점</span>
+            <span><b>${remainingTotal}</b> 남은 학점</span>
+            <span><b>${selectedCompleted().length}</b> 이수 과목</span>
+          </div>
+        </div>
+        <div class="category-progress">${categoryProgress}</div>
+      </div>
     `;
   } catch (error) {
     $('statusCards').innerHTML = `<div class="message no">상태 계산 오류: ${escapeHtml(error.message)}</div>`;
@@ -497,6 +592,7 @@ async function runPrerequisite() {
       });
       $('prereqResult').innerHTML = `
         ${prerequisiteAvailabilityView(data)}
+        ${prerequisiteFlowView(data)}
         <div class="cols">
           <div class="mini-list">
             <h3>직접 선수과목 충족 현황</h3>
@@ -526,6 +622,40 @@ function scoreTable(items) {
   return items.map((item) => courseCard(item.course, item.score)).join('');
 }
 
+function recommendationVisual(data) {
+  const selected = data.dp || [];
+  const maxCredit = Number(data.max_credit || 0);
+  const usedCredit = Number(data.dp_credit_sum || 0);
+  const grouped = selected.reduce((acc, item) => {
+    const category = item.course.category;
+    acc[category] = (acc[category] || 0) + Number(item.course.credit || 0);
+    return acc;
+  }, {});
+  const composition = Object.entries(grouped).map(([category, credit]) => {
+    const percent = usedCredit > 0 ? clampPercent((credit / usedCredit) * 100) : 0;
+    return `<span class="composition-segment ${categoryTone(category)}" style="width:${percent}%" title="${escapeHtml(category)} ${credit}학점"></span>`;
+  }).join('');
+  const legend = Object.entries(grouped).map(([category, credit]) => `
+    <span><i class="legend-dot ${categoryTone(category)}"></i>${escapeHtml(category)} ${credit}학점</span>`).join('');
+  const loadPercent = progressPercent(usedCredit, maxCredit);
+  return `
+    <div class="recommend-visual visual-block">
+      <div class="visual-head">
+        <div>
+          <span class="visual-kicker">OPTIMAL COURSE MIX</span>
+          <h3>추천 시간표 구성</h3>
+        </div>
+        <strong class="credit-big">${usedCredit}<small> / ${maxCredit}학점</small></strong>
+      </div>
+      <div class="credit-capacity">
+        <div class="capacity-track"><span style="width:${loadPercent}%"></span></div>
+        <span>${maxCredit - usedCredit}학점 여유</span>
+      </div>
+      <div class="composition-bar">${composition || '<span class="composition-empty">추천 과목 없음</span>'}</div>
+      <div class="visual-legend">${legend}</div>
+    </div>`;
+}
+
 async function runRecommend() {
   return runWithBusy($('recommendBtn'), '추천 계산 중...', async () => {
     $('recommendResult').innerHTML = '<div class="message">추천 계산 중...</div>';
@@ -537,6 +667,7 @@ async function runRecommend() {
         <h3>${escapeHtml(data.season_ko)} 추천 결과</h3>
         <p>${escapeHtml(data.algorithm_note)}</p>
       </div>
+      ${recommendationVisual(data)}
       <div class="cols">
         <div class="mini-list">
           <h3>졸업요건 부족 학점</h3>
@@ -593,21 +724,44 @@ async function runRoadmap() {
     const roadmapStartSeason = data.start_season || startSemester;
     const semesters = data.semesters.map((sem) => {
       const label = roadmapSemesterLabel(roadmapStartYear, roadmapStartSeason, sem.semester_no);
-      return `<article class="semester">
-        <h3>${escapeHtml(`${label.academicYear}학년 ${label.season}`)} · ${sem.credit_sum}학점</h3>
-        ${sem.courses.length ? courseTable(sem.courses) : '<div class="message">배치 가능한 목표 과목 없음</div>'}
+      const loadPercent = progressPercent(sem.credit_sum, Number(data.max_credit || 18));
+      const courseNodes = sem.courses.map((course) => `
+        <article class="timeline-course ${categoryTone(course.category)}">
+          <div>
+            <span>${escapeHtml(course.category)} · ${course.credit}학점</span>
+            <strong>${escapeHtml(course.course_name)}</strong>
+            <small>${escapeHtml(course.course_id)} · 난이도 ${course.difficulty}</small>
+          </div>
+        </article>`).join('');
+      return `<article class="semester timeline-semester">
+        <div class="semester-marker"><span>${sem.semester_no}</span></div>
+        <div class="semester-body">
+          <div class="semester-heading">
+            <div><span>${escapeHtml(`${label.academicYear}학년`)}</span><h3>${escapeHtml(label.season)}</h3></div>
+            <strong>${sem.credit_sum}<small> / ${data.max_credit}학점</small></strong>
+          </div>
+          <div class="semester-load"><span style="width:${loadPercent}%"></span></div>
+          <div class="timeline-courses">${courseNodes || '<div class="message">배치 가능한 목표 과목 없음</div>'}</div>
+        </div>
       </article>`;
     }).join('');
+    const totalPlannedCredits = data.semesters.reduce((sum, sem) => sum + Number(sem.credit_sum || 0), 0);
     $('roadmapResult').innerHTML = `
       <div class="message ${data.feasible ? 'ok' : 'no'}">
         <h3>${escapeHtml(data.message)}</h3>
         <p>${escapeHtml(data.algorithm_note)}</p>
       </div>
-      <div class="mini-list">
-        <h3>목표 과목 ${data.target_courses.length}개</h3>
-        <p>${data.target_courses.map((course) => `${escapeHtml(course.course_name)}(${escapeHtml(course.course_id)})`).join(', ')}</p>
+      <div class="roadmap-summary visual-block">
+        <div><span>계획 학기</span><strong>${data.semesters.length}<small>개</small></strong></div>
+        <div><span>배치 과목</span><strong>${data.semesters.reduce((sum, sem) => sum + sem.courses.length, 0)}<small>개</small></strong></div>
+        <div><span>계획 학점</span><strong>${totalPlannedCredits}<small>학점</small></strong></div>
+        <div><span>학기당 제한</span><strong>${data.max_credit}<small>학점</small></strong></div>
       </div>
-      <div class="roadmap">${semesters || '<div class="message">로드맵이 생성되지 않았습니다.</div>'}</div>
+      <div class="roadmap timeline">${semesters || '<div class="message">로드맵이 생성되지 않았습니다.</div>'}</div>
+      <details class="target-course-details">
+        <summary>목표 과목 ${data.target_courses.length}개 전체 보기</summary>
+        <p>${data.target_courses.map((course) => `${escapeHtml(course.course_name)}(${escapeHtml(course.course_id)})`).join(', ')}</p>
+      </details>
       <details class="spaced-block">
         <summary>텍스트 결과 보기</summary>
         <pre>${escapeHtml(renderRoadmapText(data, roadmapStartYear, roadmapStartSeason))}</pre>
