@@ -1,4 +1,4 @@
-﻿# GradRoad Web Prototype
+# GradRoad Web Prototype
 
 **위상정렬 알고리즘이 적용된 전공 선수과목 기반 졸업 로드맵 설계 서비스**를 간단한 웹 형태로 구현한 버전입니다.
 
@@ -18,9 +18,12 @@
 ## 실행 방법
 
 ```bash
-cd GradRoad_Web_Project
+git clone https://github.com/HoGenny/gachon-graderoad.git
+cd gachon-graderoad
 python app.py
 ```
+
+Windows는 `run_web.bat`, macOS/Linux는 `./run_web.sh`로도 실행할 수 있습니다.
 
 브라우저에서 아래 주소로 접속합니다.
 
@@ -73,11 +76,11 @@ GradRoad Web App self-test
 ## 폴더 구성
 
 ```text
-GradRoad_Web_Project/
+gachon-graderoad/
 ├─ app.py
 ├─ README.md
 ├─ requirements.txt
-├─ GradRoad_프로젝트_설명서.docx
+├─ run_web.bat / run_web.sh
 ├─ data/
 │  ├─ courses.csv
 │  ├─ prerequisites.csv
